@@ -62,7 +62,7 @@ public class ClassLoaderProvider implements InheritanceProvider {
             cr.accept(node, 0);
 
             Collection<String> parents = new HashSet<String>();
-            for (String iface : node.interfaces) {
+            for (String iface : (List<String>) node.interfaces) {
                 parents.add(iface);
             }
             if (node.superName != null) {

@@ -231,7 +231,7 @@ public class Jar {
         // Populate file names and JarFiles
         for (File file : files) {
             filenames.add(file.getName());
-            jarFiles.add(new JarFile(file, false));
+            jarFiles.add(new JarFile(file));
         }
 
         LinkedHashMap<String, JarFile> jarForResource = collectJarFiles(jarFiles);

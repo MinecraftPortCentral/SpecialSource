@@ -125,7 +125,7 @@ public class RemapperPreprocessor {
             // Get inheritance
             ArrayList<String> parents = new ArrayList<String>();
 
-            for (String iface : classNode.interfaces) {
+            for (String iface : (List<String>) classNode.interfaces) {
                 parents.add(iface);
             }
             parents.add(classNode.superName);
@@ -144,12 +144,12 @@ public class RemapperPreprocessor {
 
             // Field access
             if (accessMap != null) {
-                for (FieldNode fieldNode : classNode.fields) {
+                for (FieldNode fieldNode : (List<FieldNode>) classNode.fields) {
                     fieldNode.access = accessMap.applyFieldAccess(className, fieldNode.name, fieldNode.access);
                 }
             }
 
-            for (MethodNode methodNode : classNode.methods) {
+            for (MethodNode methodNode : (List<MethodNode>) classNode.methods) {
                 // Method access
                 if (accessMap != null) {
                     methodNode.access = accessMap.applyMethodAccess(className, methodNode.name, methodNode.desc, methodNode.access);
@@ -227,7 +227,7 @@ public class RemapperPreprocessor {
         }
         String className = ((Type) ldcClass.cst).getInternalName();
 
-        String newName = jarMapping.tryClimb(jarMapping.fields, NodeType.FIELD, className, fieldName, 0);
+        String newName = jarMapping.tryClimb(jarMapping.fields, NodeType.FIELD, className, fieldName);
         logR("Remapping " + className + "/" + fieldName + " -> " + newName);
 
         if (newName != null) {

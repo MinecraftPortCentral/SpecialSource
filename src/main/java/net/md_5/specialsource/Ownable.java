@@ -41,5 +41,4 @@ public class Ownable {
     public final String owner;
     public final String name;
     public final String descriptor;
-    public final int access;
 }
