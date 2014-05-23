@@ -26,62 +26,39 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package net.md_5.specialsource.provider;
+package net.md_5.specialsource.repo;
 
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.tree.ClassNode;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
+import net.md_5.specialsource.Jar;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.ClassNode;
 
-/**
- * Lookup inheritance from a class in a given URLClassLoader.
- */
 @RequiredArgsConstructor
-public class ClassLoaderProvider implements InheritanceProvider {
+public class JarRepo extends CachingRepo {
 
-    private final ClassLoader classLoader;
+    private final Jar jar;
 
     @Override
-    @SuppressWarnings("unchecked")
-    public Collection<String> getParents(String owner) {
-        // TODO: ToInternalName
-        String ownerInternalName = owner.replace('.', '/').concat(".class");
-        InputStream input = classLoader.getResourceAsStream(ownerInternalName);
-        if (input == null) {
-            return null;
-        }
+    protected ClassNode findClass0(String internalName) {
+        ClassNode node = null;
 
         try {
-            ClassReader cr = new ClassReader(input);
-            ClassNode node = new ClassNode();
-            cr.accept(node, 0);
+            InputStream is = jar.getClass(internalName);
 
-            Collection<String> parents = new HashSet<String>();
-            for (String iface : node.interfaces) {
-                parents.add(iface);
-            }
-            if (node.superName != null) {
-                parents.add(node.superName);
-            }
+            if (is != null) {
+                ClassReader reader = new ClassReader(is);
+                ClassNode node0 = new ClassNode();
+                reader.accept(node0, 0); // TODO
+                is.close();
 
-            return parents;
-        } catch (Exception ex) {
-            // Just ignore this, means that we couldn't get any lookup for the specified class
-        } finally {
-            if (input != null) {
-                try {
-                    input.close();
-                } catch (IOException ex) {
-                    // Too bad, can't recover from here
-                }
+                node = node0;
             }
+        } catch (IOException ex) {
+            ex.printStackTrace();
         }
 
-        return null;
+        return node;
     }
 }

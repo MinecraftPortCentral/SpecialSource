@@ -26,20 +26,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package net.md_5.specialsource;
+package net.md_5.specialsource.repo;
 
-import lombok.Data;
+import org.objectweb.asm.tree.ClassNode;
 
-/**
- * A class which can be used to represent a field, method, or anything else
- * which has an owner, a name and a descriptor.
- */
-@Data
-public class Ownable {
+public interface ClassRepo {
 
-    public final NodeType type;
-    public final String owner;
-    public final String name;
-    public final String descriptor;
-    public final int access;
+    ClassNode findClass(String internalName);
 }

@@ -36,6 +36,8 @@ import java.io.InputStream;
 import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import net.md_5.specialsource.repo.ClassRepo;
+import net.md_5.specialsource.repo.JarRepo;
 
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Attribute;
@@ -44,8 +46,6 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.commons.Remapper;
-import org.objectweb.asm.commons.RemappingClassAdapter;
-import org.objectweb.asm.commons.RemappingFieldAdapter;
 import org.objectweb.asm.tree.ClassNode;
 
 import static org.objectweb.asm.ClassWriter.*;
@@ -71,8 +71,8 @@ public class JarRemapper extends Remapper {
     /**
      * Enable or disable API-only generation.
      *
-     * If enabled, only symbols will be output to the remapped jar, suitable for use as a library.
-     * Code and resources will be excluded.
+     * If enabled, only symbols will be output to the remapped jar, suitable for
+     * use as a library. Code and resources will be excluded.
      */
     public void setGenerateAPI(boolean generateAPI) {
         if (generateAPI) {
@@ -149,14 +149,14 @@ public class JarRemapper extends Remapper {
     }
 
     @Override
-    public String mapFieldName(String owner, String name, String desc) {
-        String mapped = jarMapping.tryClimb(jarMapping.fields, NodeType.FIELD, owner, name);
+    public String mapFieldName(String owner, String name, String desc, int access) {
+        String mapped = jarMapping.tryClimb(jarMapping.fields, NodeType.FIELD, owner, name, access);
         return mapped == null ? name : mapped;
     }
 
     @Override
-    public String mapMethodName(String owner, String name, String desc) {
-        String mapped = jarMapping.tryClimb(jarMapping.methods, NodeType.METHOD, owner, name + " " + desc);
+    public String mapMethodName(String owner, String name, String desc, int access) {
+        String mapped = jarMapping.tryClimb(jarMapping.methods, NodeType.METHOD, owner, name + " " + desc, access);
         return mapped == null ? name : mapped;
     }
 
@@ -165,6 +165,7 @@ public class JarRemapper extends Remapper {
      */
     public void remapJar(Jar jar, File target) throws IOException {
         JarOutputStream out = new JarOutputStream(new FileOutputStream(target));
+        ClassRepo repo = new JarRepo(jar);
         try {
             if (jar == null) {
                 return;
@@ -180,7 +181,7 @@ public class JarRemapper extends Remapper {
                         // remap classes
                         name = name.substring(0, name.length() - CLASS_LEN);
 
-                        data = remapClassFile(is);
+                        data = remapClassFile(is, repo);
                         String newName = map(name);
 
                         entry = new JarEntry(newName == null ? name : newName + ".class");
@@ -189,7 +190,9 @@ public class JarRemapper extends Remapper {
                         continue;
                     } else {
                         // copy other resources
-                        if (!copyResources) continue; // unless generating an API
+                        if (!copyResources) {
+                            continue; // unless generating an API
+                        }
                         entry = new JarEntry(name);
 
                         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
@@ -216,16 +219,16 @@ public class JarRemapper extends Remapper {
     /**
      * Remap an individual class given an InputStream to its bytecode
      */
-    public byte[] remapClassFile(InputStream is) throws IOException {
-        return remapClassFile(new ClassReader(is));
+    public byte[] remapClassFile(InputStream is, ClassRepo repo) throws IOException {
+        return remapClassFile(new ClassReader(is), repo);
     }
 
-    public byte[] remapClassFile(byte[] in) {
-        return remapClassFile(new ClassReader(in));
+    public byte[] remapClassFile(byte[] in, ClassRepo repo) {
+        return remapClassFile(new ClassReader(in), repo);
     }
 
     @SuppressWarnings("unchecked")
-    private byte[] remapClassFile(ClassReader reader) {
+    private byte[] remapClassFile(ClassReader reader, final ClassRepo repo) {
         if (remapperPreprocessor != null) {
             byte[] pre = remapperPreprocessor.preprocess(reader);
             if (pre != null) {
@@ -234,62 +237,12 @@ public class JarRemapper extends Remapper {
         }
 
         ClassNode node = new ClassNode();
-        RemappingClassAdapter mapper = new RemappingClassAdapter(node, this)
-        {
-            @Override
-            protected MethodVisitor createRemappingMethodAdapter(int access, String newDesc, MethodVisitor sup)
-            {
-                MethodVisitor remap = new UnsortedRemappingMethodAdapter(access, newDesc, sup, remapper);
-                return new MethodVisitor(Opcodes.ASM4, remap)
-                {
-                    @Override
-                    public void visitAttribute(Attribute attr)
-                    {
-                        if (SpecialSource.kill_lvt && attr.type.equals("LocalVariableTable")) return;  
-                        if (SpecialSource.kill_generics && attr.type.equals("LocalVariableTypeTable")) return;                        
-                        if (mv != null) mv.visitAttribute(attr);
-                    }
-                };
-            }
-
-            @Override
-            protected FieldVisitor createRemappingFieldAdapter(FieldVisitor sup)
-            {
-                FieldVisitor remap = new RemappingFieldAdapter(sup, remapper);
-                return new FieldVisitor(Opcodes.ASM4, sup)
-                {
-                    @Override
-                    public void visitAttribute(Attribute attr)
-                    {
-                        if (SpecialSource.kill_lvt && attr.type.equals("LocalVariableTable")) return;
-                        if (SpecialSource.kill_generics && attr.type.equals("LocalVariableTypeTable")) return;                        
-                        if (fv != null) fv.visitAttribute(attr);
-                    }
-                };
-            }
-
-            @Override
-            public void visitSource(String source, String debug)
-            {
-                if (!SpecialSource.kill_source && cv != null)
-                {
-                    cv.visitSource(source, debug);
-                }
-            }
-
-            @Override
-            public void visitAttribute(Attribute attr)
-            {
-                if (SpecialSource.kill_generics && attr.type.equals("Signature")) return;     
-                if (cv != null) cv.visitAttribute(attr); 
-            }
-        };
+        RemappingClassAdapter mapper = new RemappingClassAdapter(node, this, repo);
         reader.accept(mapper, readerFlags);
 
         ClassWriter wr = new ClassWriter(writerFlags);
         node.accept(wr);
-        if (SpecialSource.identifier != null)
-        {
+        if (SpecialSource.identifier != null) {
             wr.newUTF8(SpecialSource.identifier);
         }
         return wr.toByteArray();

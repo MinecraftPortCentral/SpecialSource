@@ -39,6 +39,7 @@ import net.md_5.specialsource.transformer.MethodDescriptor;
 import net.md_5.specialsource.transformer.ChainingTransformer;
 import net.md_5.specialsource.transformer.MappingTransformer;
 import java.io.*;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 public class JarMapping {
@@ -72,8 +73,8 @@ public class JarMapping {
     }
 
     /**
-     * Add a class name prefix to the mapping ignore list.
-     * Note: this only applies before loading mappings, not after
+     * Add a class name prefix to the mapping ignore list. Note: this only
+     * applies before loading mappings, not after
      */
     public void addExcludedPackage(String packageName) {
         SpecialSource.log("Protecting Package: " + packageName);
@@ -90,11 +91,11 @@ public class JarMapping {
         return false;
     }
 
-    public String tryClimb(Map<String, String> map, NodeType type, String owner, String name) {
+    public String tryClimb(Map<String, String> map, NodeType type, String owner, String name, int access) {
         String key = owner + "/" + name;
 
         String mapped = map.get(key);
-        if (mapped == null) {
+        if (mapped == null && (access == -1 || (!Modifier.isPrivate(access) && !Modifier.isStatic(access)))) {
             Collection<String> parents = null;
 
             if (inheritanceMap.hasParents(owner)) {
@@ -107,7 +108,7 @@ public class JarMapping {
             if (parents != null) {
                 // climb the inheritance tree
                 for (String parent : parents) {
-                    mapped = tryClimb(map, type, parent, name);
+                    mapped = tryClimb(map, type, parent, name, access);
                     if (mapped != null) {
                         return mapped;
                     }
@@ -256,7 +257,11 @@ public class JarMapping {
 
         String line;
         while ((line = reader.readLine()) != null) {
-            if (line.startsWith("#") || line.isEmpty()) {
+            int commentIndex = line.indexOf('#');
+            if (commentIndex != -1) {
+                line = line.substring(0, commentIndex);
+            }
+            if (line.isEmpty()) {
                 continue;
             }
 
@@ -369,8 +374,8 @@ public class JarMapping {
             }
 
             if (packages.containsKey(oldPackageName) && !newPackageName.equals(packages.get(oldPackageName))) {
-                throw new IllegalArgumentException("Duplicate package mapping: " + oldPackageName + " ->" + newPackageName +
-                " but already mapped to "+packages.get(oldPackageName)+" in line="+line);
+                throw new IllegalArgumentException("Duplicate package mapping: " + oldPackageName + " ->" + newPackageName
+                        + " but already mapped to " + packages.get(oldPackageName) + " in line=" + line);
             }
 
             packages.put(oldPackageName, newPackageName);
@@ -400,7 +405,7 @@ public class JarMapping {
             }
 
             if (isExcludedPackage(oldClassName)) {
-                SpecialSource.log("Ignored FD: " + oldClassName + "/" + oldFieldName + " -> " +  newFieldName);
+                SpecialSource.log("Ignored FD: " + oldClassName + "/" + oldFieldName + " -> " + newFieldName);
                 return;
             }
 
@@ -435,7 +440,7 @@ public class JarMapping {
             }
 
             if (isExcludedPackage(oldClassName)) {
-                SpecialSource.log("Ignored MD: " + oldClassName + "/" + oldMethodName + " -> " +  newMethodName);
+                SpecialSource.log("Ignored MD: " + oldClassName + "/" + oldMethodName + " -> " + newMethodName);
                 return;
             }
 
@@ -448,6 +453,7 @@ public class JarMapping {
     public JarMapping(JarComparer oldJar, JarComparer newJar, File logFile, boolean compact) throws IOException {
         this(oldJar, newJar, logFile, compact, false);
     }
+    public JarComparer newJar;
 
     /**
      * Generate a mapping given an original jar and renamed jar
@@ -461,6 +467,8 @@ public class JarMapping {
      */
     public JarMapping(JarComparer oldJar, JarComparer newJar, File logfile, boolean compact, boolean full) throws IOException {
         SpecialSource.validate(oldJar, newJar);
+
+        this.newJar = newJar;
 
         PrintWriter out;
         if (logfile == null) {

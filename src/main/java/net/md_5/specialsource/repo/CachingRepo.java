@@ -26,20 +26,31 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package net.md_5.specialsource;
+package net.md_5.specialsource.repo;
 
-import lombok.Data;
+import java.util.Map;
+import java.util.WeakHashMap;
+import org.objectweb.asm.tree.ClassNode;
 
-/**
- * A class which can be used to represent a field, method, or anything else
- * which has an owner, a name and a descriptor.
- */
-@Data
-public class Ownable {
+public abstract class CachingRepo implements ClassRepo {
 
-    public final NodeType type;
-    public final String owner;
-    public final String name;
-    public final String descriptor;
-    public final int access;
+    private final Map<String, ClassNode> cache = new WeakHashMap<String, ClassNode>();
+
+    @Override
+    public final ClassNode findClass(String internalName) {
+        ClassNode fromCache = cache.get(internalName);
+        if (fromCache != null) {
+            return fromCache;
+        }
+
+        ClassNode found = findClass0(internalName);
+        if (found != null) {
+            cache.put(internalName, found);
+            return found;
+        }
+
+        return null;
+    }
+
+    protected abstract ClassNode findClass0(String internalName);
 }
